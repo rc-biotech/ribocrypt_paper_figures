@@ -18,10 +18,11 @@ point_iORF <- TIS + 13
 
 gene_total <- RiboCrypt:::load_collection(gene_path_fst)
 matchings <- RiboCrypt:::match_collection_to_exp(m, df_all)
-meta_sub <- m[matchings, "CELL_LINE", with = FALSE][[1]]
+term <- "CELL_LINE" #TISSUE
+meta_sub <- m[matchings, term, with = FALSE][[1]]
 region_type <- "leader+cds"
 subset <- RiboCrypt:::subset_fst_coord_by_region(df_all, names(gene_path_fst), region_type)
-gene <- RiboCrypt:::compute_collection_table(gene_path_fst, lib_sizes, df_all, "CELL_LINE",
+gene <- RiboCrypt:::compute_collection_table(gene_path_fst, lib_sizes, df_all, term,
                                              normalization = "maxNormalized", value.var = "logscore", subset = subset,
                                              kmer = 9, metadata = m, min_count = 500, as_list = TRUE, ratio_interval = c(point, point))
 
@@ -138,14 +139,15 @@ gene_model_panel <- geneModelPanelPlotFst(df_all, names(gene_path_fst), region_t
 
 final_plot <- cowplot::plot_grid(plotlist = list(NULL, grob_low, NULL, grob_high, gene_model_panel, enrichment_plot), labels = c("", "uORF down", "","uORF up", NULL, NULL),
                                  ncol = 1, rel_heights = c(0.015, 0.335, 0.015, 0.335, 0.05, 0.25), greedy = FALSE,  vjust = 0)
-# final_plot
-ggsave(final_plot, filename = "~/livemount/shared_results/ribocrypt_paper/Figure3_PTPN7.jpg", width = 10, height = 10)
-browseURL("~/livemount/shared_results/ribocrypt_paper/Figure3_PTPN7.jpg")
-
-plot_all <- RiboCrypt:::get_meta_browser_plot(table, color[color_index], color_mult = 2)
-grob_all <- grid::grid.grabExpr(ComplexHeatmap::draw(plot_all))
-final_plot_all <- cowplot::plot_grid(plotlist = list(grob_all, gene_model_panel, enrichment_plot),
-                                 ncol = 1, rel_heights = c(0.7, 0.05, 0.25), greedy = FALSE,  vjust = 0)
-# final_plot_all
-ggsave(final_plot_all, filename = "~/livemount/shared_results/ribocrypt_paper/Figure3_PTPN7_all.jpg", width = 10, height = 10)
-# browseURL("~/livemount/shared_results/ribocrypt_paper/Figure3_PTPN7_all.jpg")
+final_plot
+# # final_plot
+# ggsave(final_plot, filename = "~/livemount/shared_results/ribocrypt_paper/Figure3_PTPN7.svg", width = 10, height = 10)
+# browseURL("~/livemount/shared_results/ribocrypt_paper/Figure3_PTPN7.jpg")
+#
+# plot_all <- RiboCrypt:::get_meta_browser_plot(table, color[color_index], color_mult = 2)
+# grob_all <- grid::grid.grabExpr(ComplexHeatmap::draw(plot_all))
+# final_plot_all <- cowplot::plot_grid(plotlist = list(grob_all, gene_model_panel, enrichment_plot),
+#                                  ncol = 1, rel_heights = c(0.7, 0.05, 0.25), greedy = FALSE,  vjust = 0)
+# # final_plot_all
+# ggsave(final_plot_all, filename = "~/livemount/shared_results/ribocrypt_paper/Figure3_PTPN7_all.svg", width = 10, height = 10)
+# # browseURL("~/livemount/shared_results/ribocrypt_paper/Figure3_PTPN7_all.jpg")

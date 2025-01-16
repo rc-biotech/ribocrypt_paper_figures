@@ -19,7 +19,7 @@ translon_file <- file.path(rds_dir, "ORF_prediction_final.rds")
 # Parameters
 subset_sizes <- c(1, 3, 6, 10, 30, 100, 500, 1000, 1500, 2000, 2500, 2783)
 samplings <- seq(20)
-indices_max <- seq(5001) # Number of ORFs to use (max per species)
+indices_max <- seq(20001) # Number of ORFs to use (max per species, yeast has ~ 5k max)
 ORF_categories_keep <- c("annotated", "uORF", "dORF")
 longestORF = FALSE
 startCodon = startDefinition(1)
@@ -28,7 +28,7 @@ minimumLength = 0
 
 
 
-## Figure 4D Ribo-seq ORF prediction downsampling
+## Figure 4D: Ribo-seq ORF prediction downsampling
 species <- c("Saccharomyces_cerevisiae", "Homo_sapiens")
 if (file.exists(translon_file)) {
   dt_translon_all <- readRDS(translon_file)
@@ -109,8 +109,8 @@ if (file.exists(translon_file)) {
     upstream_gr <- windowPerGroup(orf_start_gr, mrna, 20, -2)
     valid_upstream <- as.logical(widthPerGroup(upstream_gr) > 0)
     message("- Loading gene fsts")
-    bins <- cut(seq_along(genes), length(genes) / 100)
-    levels(bins)[1] <- "(1,101]"
+    bins <- cut_width(seq_along(genes), 100, center = 51)
+
     all_bins <- lapply(levels(bins), function(bin) {
       message("-- Bin:", bin)
       file_grl <- file.path(rds_dir, paste0("ORF_merge_grl", specie, bin, "_subsamp_", length(samplings), ".fst"))
@@ -220,20 +220,7 @@ translon_plot_orfs <- ggplot(data = dt_translon_all, aes(x = subset_size, y = pr
   theme(legend.position="top") + guides(color="none") +
   guides(fill=guide_legend(title="Species")); plot(translon_plot_orfs)
 
-glm_smooth <- function(...) {
-  geom_smooth(method = "glm", method.args = list(family = quasi(link = "log", variance = "mu")), ...)
-}
-
-translon_plot_glm <- ggplot(data = dt_translon_all[as.numeric(as.character(subset_size)) <= 1000,], aes(x = as.numeric(as.character(subset_size)), y = prediction_orfs, color = species)) +
-  glm_smooth() + theme_minimal() + ylab("Predicted ORFs (%)") +  xlab(paste("# Libraries (of", length(samplings), "subsamplings)")) +
-  theme(legend.position="top") + guides(color="none") +
-  guides(fill=guide_legend(title="Species")); plot(translon_plot_glm)
-
-p<-p+geom_ribbon(aes(ymin=data$lower, ymax=data$upper), linetype=2, alpha=0.1)
-  theme_minimal() + ylab("Predicted ORFs (%)") +  xlab(paste("# Libraries (of", length(samplings), "subsamplings)")) +
-  theme(legend.position="top") + guides(color="none") +
-  guides(fill=guide_legend(title="Species")); plot(translon_plot)
-
+# Percentage output
 ggsave(file.path(plot_dir, "Figure_4D_subsampling_orf_pred.png"),
        translon_plot, width = 5, height = 3, dpi = 400)
 ggsave(file.path(plot_dir, "Figure_4D_subsampling_orf_pred.jpg"),
@@ -241,21 +228,114 @@ ggsave(file.path(plot_dir, "Figure_4D_subsampling_orf_pred.jpg"),
 ggsave(file.path(plot_dir, "Figure_4D_subsampling_orf_pred.svg"),
        translon_plot, width = 6, height = 6, dpi = 400)
 
+# Numeric output
+ggsave(file.path(plot_dir, "Figure_4D_subsampling_orf_pred_numeric.png"),
+       translon_plot_orfs, width = 5, height = 3, dpi = 400)
+ggsave(file.path(plot_dir, "Figure_4D_subsampling_orf_pred_numeric.jpg"),
+       translon_plot_orfs, width = 5, height = 3, dpi = 400)
+ggsave(file.path(plot_dir, "Figure_4D_subsampling_orf_pred_numeric.svg"),
+       translon_plot_orfs, width = 6, height = 6, dpi = 400)
+
+# Split by species
+species_finished <- unique(dt_translon_all$species)
+for (s in species_finished) {
+  translon_plot_orfs <- ggplot(data = dt_translon_all[species == s,], aes(x = subset_size, y = predicted, fill = species, color = species)) +
+    geom_boxplot() +
+    theme_minimal() + ylab("# Predicted ORFs") +  xlab(paste("# Libraries (of", length(samplings), "subsamplings)")) +
+    theme(legend.position="top") + guides(color="none") +
+    guides(fill=guide_legend(title="Species")); plot(translon_plot_orfs)
+  ggsave(file.path(plot_dir, paste0("Figure_4D_subsampling_orf_pred_numeric_", s, ".png")),
+         translon_plot_orfs, width = 5, height = 3, dpi = 400)
+  ggsave(file.path(plot_dir, paste0("Figure_4D_subsampling_orf_pred_numeric_", s, ".jpg")),
+         translon_plot_orfs, width = 5, height = 3, dpi = 400)
+  ggsave(file.path(plot_dir, paste0("Figure_4D_subsampling_orf_pred_numeric_", s, ".pdf")),
+         translon_plot_orfs, width = 5, height = 3, dpi = 400)
+
+}
+
+# BY CDS
+dt <- readRDS("~/livemount/shared_results/predicted_orfs/Ribo_orfs_Homo_sapiens/uORF_uoORF_annotated_Homo_sapiens_all_merged-Homo_sapiens_RFP_prediction_table.rds")
+df <- read.experiment("all_merged-Homo_sapiens")
+values <- c(length(filterTranscripts(df, 0,1,0,longestPerGene = TRUE)),
+            length(unique(dt[type == "annotated",]$ensembl_gene_id)),
+            length(unique(dt[type == "annotated" & predicted == TRUE,]$ensembl_gene_id)))
+names(values) <- c("all genes", "10 reads genes", "predicted genes")
+values_rel_human <- round((values / values[1])*100, 2)
+values_rel_human # As percentage
+values # Raw numbers
+
+dt <- readRDS("~/livemount/shared_results/predicted_orfs/Ribo_orfs_Saccharomyces_cerevisiae/annotated_uORF_dORF_Saccharomyces cerevisiae_all_merged_all_merged-Saccharomyces_cerevisiae_RFP_WT_prediction_table.rds")
+df <- read.experiment("all_merged-Saccharomyces_cerevisiae")
+values <- c(length(filterTranscripts(df, 0,1,0,longestPerGene = TRUE)),
+            length(unique(dt[type == "annotated",]$ensembl_gene_id)),
+            length(unique(dt[type == "annotated" & predicted == TRUE,]$ensembl_gene_id)))
+names(values) <- c("all genes", "10 reads genes", "predicted genes")
+values_rel_yeast <- round((values / values[1])*100, 2)
+values_rel_yeast # As percentage
+values # Raw numbers
+
+dt_cds_normalized <- dt_translon_all[as.numeric(as.character(subset_size)) <= 1000,]
+dt_cds_normalized[species == "Saccharomyces_cerevisiae", prediction_orfs := prediction_orfs * (values_rel_yeast["predicted genes"] / 100)]
+dt_cds_normalized[species == "Homo_sapiens", prediction_orfs := prediction_orfs * (values_rel_human["predicted genes"] / 100)]
+translon_plot_cds <- ggplot(data = dt_cds_normalized, aes(x = subset_size, y = prediction_orfs, fill = species)) +
+  geom_boxplot(fatten=0.7, outlier.size = 0.3) +
+  theme_minimal() + ylab("Predicted CDSs (%)") +  xlab(paste("# Libraries (of", length(samplings), "subsamplings)")) +
+  theme(legend.position="top") + guides(color="none") +
+  geom_hline(yintercept = c(values_rel_human["10 reads genes"], values_rel_yeast["10 reads genes"]), color = c("red", "#00BFC4"), linetype = 'dotted') +
+  scale_y_continuous(limits = c(0, 96)) +
+  guides(fill=guide_legend(title="Species")); plot(translon_plot_cds)
+
+save_image_formats <- function(plot, dir, filename, formats = c(".svg", ".jpg"),
+                               google_dir = NULL,
+                               width = 6, height = 6, dpi = 400) {
+  file_names <- paste0(filename, formats)
+  for (file in file_names) {
+    message(file)
+    ggsave(file.path(dir, file),
+           plot, width = width, height = height, dpi = dpi)
+    if (!is.null(google_dir)) {
+      googledrive::drive_put(file.path(dir, file),
+                             google_dir,
+                             name = file)
+    }
+  }
+}
+save_image_formats(translon_plot_cds, plot_dir, "Figure_4F_subsampling_cds_pred",
+                   google_dir = "https://drive.google.com/drive/folders/1SYsf0cf-gwU9xFw0Kht7FJaMSOhWzHGY")
+
+
+
+
+
+# glm_smooth <- function(...) {
+#   geom_smooth(method = "glm", method.args = list(family = quasi(link = "log", variance = "mu")), ...)
+# }
+
+# translon_plot_glm <- ggplot(data = dt_translon_all[as.numeric(as.character(subset_size)) <= 1000,], aes(x = as.numeric(as.character(subset_size)), y = prediction_orfs, color = species)) +
+#   glm_smooth() + theme_minimal() + ylab("Predicted ORFs (%)") +  xlab(paste("# Libraries (of", length(samplings), "subsamplings)")) +
+#   theme(legend.position="top") + guides(color="none") +
+#   guides(fill=guide_legend(title="Species")); plot(translon_plot_glm)
+#
+# p<-p+geom_ribbon(aes(ymin=data$lower, ymax=data$upper), linetype=2, alpha=0.1)
+#   theme_minimal() + ylab("Predicted ORFs (%)") +  xlab(paste("# Libraries (of", length(samplings), "subsamplings)")) +
+#   theme(legend.position="top") + guides(color="none") +
+#   guides(fill=guide_legend(title="Species")); plot(translon_plot)
+
 # Inspect
-table_all_pred_fst
-index <- 6
-table_all_pred_fst[index,]
-gene <- genes[index]
-gene_path_fst <- paste0(collection_folder, gene, ".fst")
-table_long <- RiboCrypt:::load_collection(gene_path_fst)
-all_subsets <- table_long[, .(count = sum(count)), by = position]
-all_subsets[, frame := factor(rep(seq.int(0,2), length.out = .N))]
-table_grl <- subset_fst_by_region(df_all, table_long, id = id,
-                                  gene_mrna = mrna_fst[index], subset = grl_fst[index])
-
-
-ggplot(data = all_subsets, mapping = aes(x = position, y = count)) +
-  geom_line(aes(color = frame)) + ggtitle(gene) + geom_vline(xintercept = (c(min(table_grl$position), max(table_grl$position))))
+# table_all_pred_fst
+# index <- 6
+# table_all_pred_fst[index,]
+# gene <- genes[index]
+# gene_path_fst <- paste0(collection_folder, gene, ".fst")
+# table_long <- RiboCrypt:::load_collection(gene_path_fst)
+# all_subsets <- table_long[, .(count = sum(count)), by = position]
+# all_subsets[, frame := factor(rep(seq.int(0,2), length.out = .N))]
+# table_grl <- subset_fst_by_region(df_all, table_long, id = id,
+#                                   gene_mrna = mrna_fst[index], subset = grl_fst[index])
+#
+#
+# ggplot(data = all_subsets, mapping = aes(x = position, y = count)) +
+#   geom_line(aes(color = frame)) + ggtitle(gene) + geom_vline(xintercept = (c(min(table_grl$position), max(table_grl$position))))
 
 
 

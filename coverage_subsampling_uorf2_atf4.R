@@ -66,7 +66,7 @@ if (!file.exists(atf4_uorf2_dt.rds)) {
   all_subsets[, tx_norm_counts_subset := counts / sum(counts + 1) , by = size]
 
   saveRDS(all_subsets, atf4_uorf2_dt.rds)
-} else readRDS(atf4_uorf2_dt.rds)
+} else all_subsets <- readRDS(atf4_uorf2_dt.rds)
 
 
 ggplot(all_subsets) + geom_raster(aes(x = position, y = as.factor(size), fill = counts))
