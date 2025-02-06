@@ -1,6 +1,6 @@
 # Source sub scripts
 result_dir <- "~/livemount/shared_results/ribocrypt_paper/ORF_prediction_results/intron_results/"
-#source("~/livemount/shared_scripts/ribocrypt_paper_figures/ORF_prediction_subsampling/introns/introns_exons_pair_analysis.R")
+source("~/livemount/shared_scripts/ribocrypt_paper_figures/ORF_prediction_subsampling/introns/introns_exons_pair_analysis.R")
 source("~/livemount/shared_scripts/ribocrypt_paper_figures/ORF_prediction_subsampling/introns/introns_exons_pair_analysis_tables.R")
 source("~/livemount/shared_scripts/ribocrypt_paper_figures/ORF_prediction_subsampling/introns/intron_phylo_analysis.R")
 

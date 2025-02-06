@@ -1,21 +1,26 @@
 source("~/livemount/shared_scripts/ribocrypt_paper_figures/ORF_prediction_subsampling/ORF_statistics_functions.R")
+github_forks_repo <- "~/livemount/forks"
+conservation_dir <- file.path(github_forks_repo, "translon-conservation/")
+conservation_raw_dir <- file.path(conservation_dir, "data", "raw")
 
 ref_dir <- ORFik::config()["ref"]
-all_exp <- list.experiments(validate = FALSE, pattern = "all_merged-", libtypeExclusive = "RFP")
+all_exp <- list.experiments(validate = FALSE, pattern = "all_merged-", libtypeExclusive = "RFP", BPPARAM = SerialParam())
 all_exp <- all_exp[libtypes == "RFP"]
-
 organisms <- all_exp$name
 organisms <- organisms[grep("_modalities$|HEK293|_04|Homo_sapiens", organisms, invert = TRUE)]
+
+remake <- F
 org <- "all_merged-Homo_sapiens_04_oct_2024_all"
-organisms <- c(org, organisms)[1]
+organisms <- c(org, organisms)
+# organisms <- organisms[1]
 for (org in organisms) {
   df <- read.experiment(org, validate = FALSE)
   org_short <- gsub(" ", "_", tolower(organism(df)))
   message("- ", org_short)
   org_dir <- file.path(ref_dir, org_short, "predicted_translons", "ORFik")
   org_dir_in <- file.path(org_dir, "longest_predicted")
-  org_dir_out <- file.path(org_dir, "NTE_candidates")
-  if (file.exists(file.path(org_dir_out, "CDS_NTE_candidates_ranges.rds"))) next
+  org_dir_out <- result_dir <- file.path(org_dir, "NTE_candidates")
+  if (file.exists(file.path(org_dir_out, "CDS_NTE_candidates_ranges.rds")) & !remake) next
   if (!dir.exists(org_dir_out)) dir.create(org_dir_out, recursive = TRUE)
 
   RFP <- fimport(filepath(df, "cov"))
@@ -62,6 +67,7 @@ for (org in organisms) {
   orfs_table_files <- list.files(org_dir_in, "prediction_table.rds", full.names = TRUE)
   stopifnot(length(orfs_table_files) == 1)
   orfs_table <- readRDS(orfs_table_files)
+  if (colnames(orfs_table)[1] == "gene") colnames(orfs_table)[1:2] <- c("ensembl_gene_id", "ensembl_tx_name")
   ids_pred <- orfs_table[predicted == TRUE,][!duplicated(ensembl_tx_name),]$id
   ids_non_pred <- orfs_table[predicted == FALSE][!(ensembl_tx_name %in% orfs_table[id %in% ids_pred]$ensembl_gene_id)][!duplicated(ensembl_tx_name),]$id
   stopifnot(!any(ids_non_pred %in% ids_pred))
@@ -95,11 +101,13 @@ for (org in organisms) {
   filter <- orfScores$ORFScores > 5 & orfScores$frame_zero_RP > 300 &
     orfScores$ORF_F0_codons_covered > 3 & orfScores$`ORF_F0_codons_covered(%)` > 10 &
     orfScores$frame_bias_relative > 0.4 & !overlap_filter
-
-  orfScores[, predicted := filter]
-  orfScores[, overlaps_other_cds := overlap_filter]
-
   final <- append_gene_ids(orfs_gr, df, orfScores)
+  final[, longest_active_isoform := FALSE]
+  final[filter, longest_active_isoform := seq(.N) == which.max(ORF_length_nt), by = tx_ids]
+  filter <- filter & final$longest_active_isoform
+
+  final[, predicted := filter]
+  final[, overlaps_other_cds := overlap_filter]
   final <- orf_to_cds_coverage_statistcs(cds[final$tx_ids], RFP, final)
   message("-- Final candidates: ", nrow(final))
   final_predicted <- final[filter]
@@ -118,8 +126,30 @@ for (org in organisms) {
   fst::write_fst(final_predicted, file.path(org_dir_out, "NTE_predicted.fst"))
   saveRDS(predicted_cds_nte, file = file.path(org_dir_out, "CDS_predicted_ranges.rds"))
   saveRDS(predicted_gr, file = file.path(org_dir_out, "NTE_predicted_ranges.rds"))
-  export.bed12(orfs_gr, file = file.path(org_dir_out, "NTEs_candidates.bed12"))
-  export.bed12(predicted_gr, file = file.path(org_dir_out, "NTEs.bed12"))
-  export.bed12(leaders[unique(names(predicted_gr))], file.path(org_dir_out, "leaders.bed12"))
+
+  if (org_short == "homo_sapiens") { # The sets for phylo analysis ->
+    not_predicted <- orfs_gr[!filter & !overlap_filter & !(txNames(orfs_gr) %in% txNames(predicted_gr))]
+    not_predicted_gr <-
+      sample_to_matching_lengths_quantiles_and_size(predicted_gr, not_predicted)
+    background_from_predicted_subset <- leaders[unique(names(predicted_gr))]
+    background_from_predicted_subset_equal_size <-
+      window_next_to_window(extendLeaders(background_from_predicted_subset, 200), predicted_gr,
+                            start_direction = "3'")
+    stopifnot(length(background_from_predicted_subset_equal_size) == length(predicted_gr))
+    region <- "NTEs"
+    background <- "leader"
+    file_names <- c("_predicted", "_not_predicted",
+                    paste0("_predicted_whole_", background),
+                    paste0("_predicted_whole_", background, "_equal_size"))
+    file_names <- paste0(region, file_names, ".bed12")
+    files_to_send <- file.path(result_dir, file_names)
+    ORFik::export.bed12(predicted_gr, files_to_send[1])
+    ORFik::export.bed12(not_predicted_gr, files_to_send[2])
+    ORFik::export.bed12(background_from_predicted_subset, files_to_send[3])
+    ORFik::export.bed12(background_from_predicted_subset_equal_size, files_to_send[4])
+
+    stopifnot(all(file.exists(files_to_send)))
+    file.copy(files_to_send, file.path(conservation_raw_dir, file_names))
+  }
 }
 

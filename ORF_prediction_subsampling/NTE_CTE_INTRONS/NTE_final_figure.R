@@ -1,8 +1,10 @@
 
 result_dir <- "~/livemount/shared_results/ribocrypt_paper/ORF_prediction_results/CTE_NTE_analysis/"
 # source("~/livemount/shared_scripts/ribocrypt_paper_figures/ORF_prediction_subsampling/NTE_CTE/NTE_subset.R")
-source("~/livemount/shared_scripts/ribocrypt_paper_figures/ORF_prediction_subsampling/NTE_CTE/NTE_subset_tables.R")
-source("~/livemount/shared_scripts/ribocrypt_paper_figures/ORF_prediction_subsampling/NTE_CTE/NTE_CTE_phylo.R")
+source("~/livemount/shared_scripts/ribocrypt_paper_figures/ORF_prediction_subsampling/NTE_CTE_INTRONS/NTE_subset_tables.R")
+if (!exists(PHYLO_IS_DONE)) {
+  source("~/livemount/shared_scripts/ribocrypt_paper_figures/ORF_prediction_subsampling/NTE_CTE_INTRONS/Phylo_NTE_CTE_INTRON.R")
+}
 
 # Combined plot with phylo
 all_plots <- gridExtra::arrangeGrob(metacoverage_plot_NTE, phylo_plot_NTE, ncol = 1)

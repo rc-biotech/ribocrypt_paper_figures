@@ -32,6 +32,76 @@ subset_to_group_index <- function(introns, index, up_to_index = FALSE, cds = NUL
   return(introns_second_intron)
 }
 
+sample_to_matching_lengths_quantiles_and_size <- function(candidates_gr_all,
+                                                          noncandidates_gr_all,
+                                                          max_diff = 4,
+                                                          size = length(candidates_gr_all),
+                                                          sampling_attempts = 100) {
+  if (size == 0) return(GRangesList())
+  A <- widthPerGroup(candidates_gr_all, FALSE)
+  B <- widthPerGroup(noncandidates_gr_all, FALSE)
+  Q_A <- quantile(A, probs = c(0.25, 0.50, 0.75))
+
+  for (sampling in seq(sampling_attempts)) {
+    sampling_indices <- match_quantiles_indices(A, B, size)
+    B_resampled <- B[sampling_indices]
+
+    Q_B <- quantile(B_resampled, probs = c(0.25, 0.50, 0.75))
+    invalid_sampling <- mean(A) > mean(B_resampled) + max_diff | mean(A) < mean(B_resampled) - max_diff
+    if (!invalid_sampling) break
+  }
+  stopifnot(!invalid_sampling)
+  message("Completed on sampling attempt: ", sampling)
+  message("New quantiles:")
+  print(Q_A)
+  print(Q_B)
+  return(noncandidates_gr_all[sampling_indices])
+}
+
+#' Match quantiles from 2 sets
+#'
+#' Given vectors A and B, subset to length of A and match quantiles in B
+#' to quantiles in A
+#' @return The indices in B to subset on to get matching quantiles and size
+match_quantiles_indices <- function(A, B, size = length(A)) {
+  # Compute quantiles of A
+  A_quants <- quantile(A, probs = c(0.25, 0.50, 0.75), na.rm = TRUE)
+
+  # Assign each value in A to a quantile bin
+  A_bins <- cut(A, breaks = c(-Inf, A_quants, Inf), labels = FALSE, include.lowest = TRUE)
+
+  # Get proportion of A in each bin
+  A_bin_counts <- table(A_bins) / length(A)
+
+  # Compute corresponding bins for B
+  B_bins <- cut(B, breaks = c(-Inf, A_quants, Inf), labels = FALSE, include.lowest = TRUE)
+
+  # Sample indices from B based on A's bin proportions
+  selected_indices <- c()
+
+  for (bin in seq_along(A_bin_counts)) {
+    bin_indices <- which(B_bins == bin)
+
+    # Number to sample from this bin
+    sample_size <- round(A_bin_counts[bin] * size)
+
+    # Ensure at least one sample if available
+    if (length(bin_indices) > 0) {
+      selected_indices <- c(selected_indices, sample(bin_indices, min(sample_size, length(bin_indices)), replace = FALSE))
+    }
+  }
+
+  # Ensure the final sample size matches the requested size
+  if (length(selected_indices) > size) {
+    selected_indices <- sample(selected_indices, size, replace = FALSE)
+  } else if (length(selected_indices) < size) {
+    extra_indices <- sample(setdiff(seq_along(B), selected_indices), size - length(selected_indices), replace = FALSE)
+    selected_indices <- c(selected_indices, extra_indices)
+  }
+
+  return(selected_indices)
+}
+
 intron_in_cds_only <- function(introns_first_intron, cds, cds_starts_all,
                                cds_stops_all) {
   stopifnot(all(lengths(introns_first_intron) == 1))
@@ -73,9 +143,8 @@ intron_in_cds_only <- function(introns_first_intron, cds, cds_starts_all,
   return(introns_first_intron)
 }
 
-append_gene_ids <- function(candidates_gr, df, candidates) {
-  tx_ids <- data.table(CTE_id = names(candidates_gr),
-                       tx_ids = txNames(candidates_gr))
+append_gene_ids <- function(candidates_gr, df, candidates, tx_ids = txNames(candidates_gr)) {
+  tx_ids <- data.table(CTE_id = names(candidates_gr), tx_ids)
   symbols <- symbols(df)
   if (nrow(symbols) > 0) {
     if (!is.null(symbols$uniprot_id) )symbols[, uniprot_id := NULL]
@@ -151,4 +220,29 @@ orf_to_cds_coverage_statistcs <- function(cds, RFP, dt) {
   dt[, `ORF_cds_count_length_ratio(%)` := (ORF_count_length_ratio / cds_count_length_ratio)*100]
   dt[]
   return(dt)
+}
+
+window_next_to_window <- function(whole_window,
+                                  first_window,
+                                  start_direction = "5'",
+                                  width_multiplier = 1L,
+                                  removeEmpty = TRUE) {
+  stopifnot(length(whole_window) == length(first_window))
+  if (length(whole_window) == 0) return(GRangesList())
+  whole_window_grl <- whole_window
+  whole_window <- pmapToTranscriptF(whole_window, whole_window, FALSE, TRUE, TRUE)
+  window_width <- widthPerGroup(first_window, FALSE)
+  if (start_direction == "5'") {
+    start(whole_window) <- start(whole_window) + window_width
+    end(whole_window) <- start(whole_window) + window_width*width_multiplier + 1L
+  } else {
+    end(whole_window) <- end(whole_window) - window_width
+    start(whole_window) <- end(whole_window) - window_width*width_multiplier - 1L
+  }
+
+  whole_window <- trim(whole_window)
+  to_map_back <- unlistGrl(whole_window)
+  names(to_map_back) <- NULL
+  second_window <- pmapFromTranscriptF(to_map_back, whole_window_grl, removeEmpty = removeEmpty)
+  return(second_window)
 }

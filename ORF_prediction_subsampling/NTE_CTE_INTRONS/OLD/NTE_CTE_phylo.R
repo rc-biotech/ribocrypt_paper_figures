@@ -21,25 +21,26 @@ if (!dir_exists | fetch_github) {
 }
 
 types_all <- list.dirs(file.path(result_dir, "translon-conservation", "results/"), recursive = FALSE, full.names = FALSE)
-types <- c("nte_leader","cte_trailer")
-stopifnot(all(types %in% types_all))
-pred_folders <- file.path(result_dir, "translon-conservation", "results", types, "bed/")
-names(pred_folders) <- types
-t <- types[1]
+regions <- c("nte_leader","cte_trailer")
+stopifnot(all(regions %in% types_all))
+pred_folders <- file.path(result_dir, "translon-conservation", "results", regions, "bed/")
+names(pred_folders) <- regions
+region <- regions[1]
 
 dt_all <- data.table()
-for (t in types) {
-  pred_folder <- pred_folders[t]
+for (region in regions) {
+  pred_folder <- pred_folders[region]
   files <- list.files(pred_folder, "_translated")
   files_untrans <- list.files(pred_folder, "_untranslated")
-  names(files) <- names(files_untrans) <- c("phylo_csf", "phylo_p", "phylo_best_30nt")
-  type <- names(files)[1]
-  for (type in names(files)) {
-    message(t, " - ", type)
-    phylo <- import(file.path(pred_folder, files_untrans[type]))
+  scores <- c("phylo_csf", "phylo_p", "phylo_best_30nt")
+  names(files) <- names(files_untrans) <- scores
+  score <- scores[1]
+  for (score in scores) {
+    message(region, " - ", score)
+    phylo <- import(file.path(pred_folder, files_untrans[score]))
     length(phylo)
     stopifnot(length(phylo) > 0)
-    phylo_un <- import(file.path(pred_folder, files[type]))
+    phylo_un <- import(file.path(pred_folder, files[score]))
     phylo$status <- "translated"
     phylo_un$status <- "untranslated"
     phylo <- c(phylo, phylo_un)
@@ -66,7 +67,7 @@ for (t in types) {
     tru_score <- tru@unlistData$score
     score <- (tr_score+ 1) / (tru_score + 1)
     dt_all <- rbindlist(list(dt_all, data.table(score = score, tr_score, tru_score,
-                                                type = type, region = t, tx = names(tr))))
+                                                type = type, region, tx = names(tr))))
   }
 }
 

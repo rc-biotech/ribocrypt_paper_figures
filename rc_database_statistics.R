@@ -1,6 +1,6 @@
 library(data.table)
 library(ggplot2)
-all_exp <- list.experiments(validate = FALSE, "~/Bio_data/ORFik_experiments")
+all_exp <- list.experiments(validate = FALSE)
 res_folder <- "~/livemount/shared_results/ribocrypt_paper/"
 metadata <- fread("~/livemount/Bio_data/NGS_pipeline/FINAL_LIST.csv")
 metadata$INHIBITOR[metadata$INHIBITOR == "chx"] <- "Cyclohexamide"
@@ -10,7 +10,7 @@ metadata$INHIBITOR[metadata$INHIBITOR == "harr"] <- "Harringtonin"
 metadata$INHIBITOR[metadata$INHIBITOR == "ltm"] <- "Lactimidomycin"
 metadata$CELL_LINE[metadata$CELL_LINE == "C57BL/6"] <- ""
 metadata_used <- fread("~/livemount/Bio_data/NGS_pipeline/FINAL_LIST.csv")
-all_libs <- 13023 # The new stats, update when we have the csv
+all_libs <- nrow(metadata_used) # The new stats, update when we have the csv
 
 # top5 <- function(x, other_id) {
 #   top5_table <- head(sort(table(x[x != "" & x != "NONE"]), decreasing = TRUE), 5)
@@ -38,12 +38,19 @@ file_breakdown <- c(FASTA = all_libs, BAM = all_libs, OFST = all_libs, Pshifted_
 top <- gsub(" ", "_", names(top5_orgs[-1]))
 all_allmerged <- all_exp[grep("all_merged", name)][libtypes == "RFP",][]
 all_merged <- grep(paste(top, collapse = "|"), all_allmerged$name, value = T)
+all_merged <- all_merged[-c(3,4)]
 rpf_stats <- function(x) {
-  df <- read.experiment(x, validate = FALSE, "~/Bio_data/ORFik_experiments")
-  txkeep <- filterTranscripts(df, 0,1,0)
+  df <- read.experiment(x, validate = FALSE)
+  txkeep <-
+  if (x == "all_merged-Homo_sapiens_04_oct_2024_all") {
+    message("Using human mane dataset")
+    cds_all <- filterTranscripts(df, 0,1,0, longestPerGene = FALSE)
+    cds_all[cds_all %in% data.table::fread("~/livemount/shared_data/canonical_transcripts.txt")[[1]]]
+  } else filterTranscripts(df, 0,1,0)
   counts <- suppressWarnings(countTable(df, region = "cds"))
   counts <- counts[rownames(counts) %in% txkeep]
-  data.table(sum(counts),  round(sum(counts > 100) / nrow(counts), 2)*100)
+  data.table(sum(counts),  round(sum(counts > 100) / nrow(counts), 2)*100,
+             sum(counts > 100), gsub("all_merged-", "", x))
 }
 # expression <- rbindlist(lapply(all_allmerged$name, function(x) rpf_stats(x)))
 
